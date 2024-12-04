@@ -11,7 +11,7 @@ ARG DUMB_INIT_VERSION=1.2.5
 ARG RUNNER_USER_UID=1001
 ARG DOCKER_GROUP_GID=121
 # Android arguments
-ARG CMD_LINE_VERSION=11076708_latest
+ARG CMD_LINE_VERSION=9477386_latest
 # All versions of NDK to be installed.
 ARG ANDROID_NDK_LIST="21.1.6352462;26.3.11579264"
 # The NDK version being used to build release product.
@@ -24,6 +24,7 @@ RUN apt-get update -y \
     && apt-get update -y \
     && apt-get install -y --no-install-recommends \
     curl \
+    wget \
     ca-certificates \
     git \
     jq \
@@ -100,11 +101,21 @@ RUN export ARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
 ENV PATH="${PATH}:${HOME}/.local/bin/"
 ENV ImageOS=ubuntu22
 
+# Add the jdk
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+    openjdk-11-jdk
+
+RUN echo $(dirname $( readlink -f $(which java) ))
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
 # Add the Android sdk,ndk,avd
 ENV ANDROID_HOME /root/Android/SDK/
+ENV ANDROID_NDK $ANDROID_HOME/ndk/$ANDROID_NDK_DEFAULT
 
 # Install sdkmanager command line tool
-RUN wget https://dl.google.com/android/repository/commandlinetools-linux-${CMD_LINE_VERSION}.zip -P /tmp && \
+RUN wget -q https://dl.google.com/android/repository/commandlinetools-linux-${CMD_LINE_VERSION}.zip -P /tmp && \
     mkdir -p $ANDROID_HOME && \
     unzip -d $ANDROID_HOME /tmp/commandlinetools-linux-${CMD_LINE_VERSION}.zip && \
     rm /tmp/commandlinetools-linux-${CMD_LINE_VERSION}.zip
@@ -119,15 +130,12 @@ RUN sdkmanager --sdk_root=$ANDROID_HOME --install \
 # Install android ndk
 RUN echo $ANDROID_NDK_LIST | awk -F ';' '{ for(i=1; i<=NF; i++) print $i }' \
     | while read -r substring; do sdkmanager --sdk_root=$ANDROID_HOME --install "ndk;$substring"; done
-ENV ANDROID_NDK $ANDROID_HOME/ndk/$ANDROID_NDK_DEFAULT
 # A legacy NDK21 argument to be deprecated.
 ENV ANDROID_NDK_21 $ANDROID_NDK
 # Setup avd
 RUN avdmanager --verbose create avd --force --name "Nexus_5_API_28" \
       --package "system-images;android-28;google_apis;x86" \
       --force -d "Nexus 5"
-
-
 
 RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment
